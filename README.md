@@ -278,8 +278,29 @@ func doTask() {
 
 ```
 
+## Sync And Async Mix
 
-## performance
+```golang
+s := New(&State{Name:"test"})
+s.Do("step1", func(s *steps.Step) {
+    s.Done()
+})
+s.Async("step2", func() {
+    // concurrently execute work1 and work2
+    s.Step("work1", func(s *steps.Step) {
+        s.Done()
+    })
+    s.Step("work1", func(s *steps.Step) {
+        s.Done()
+    })
+})
+// after step2 done, execute step3
+s.Do("step3", func(s *steps.Step) {
+    s.Done()
+})
+```
+
+## Performance
 
 ```
 goos: darwin

@@ -4,14 +4,18 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
 // Step
 type Step struct {
-	state     *State // state of step
-	parent    *Step  // the parent step which generate this one
-	lastChild *Step  // last executed step of the current step
+	state        *State  // state of step
+	parent       *Step   // the parent step which generate this one
+	children     []*Step // last executed step of the current step
+	inAsync      bool
+	wg           sync.WaitGroup
+	childrenLock sync.RWMutex
 }
 
 // New new a step with state
@@ -22,7 +26,7 @@ func New(state *State) *Step {
 // Done mark the step is done successfully
 func (s *Step) Done() *Step {
 	now := time.Now()
-	s.state.Err = ""
+	s.state.Errs = []string{}
 	s.state.DoneAt = &now
 	return s
 }
@@ -30,7 +34,7 @@ func (s *Step) Done() *Step {
 // Fail mark the step is done with fail
 func (s *Step) Fail(err error) *Step {
 	now := time.Now()
-	s.state.Err = err.Error()
+	s.state.Errs = []string{err.Error()}
 	s.state.DoneAt = &now
 	return s
 }
@@ -48,29 +52,45 @@ func (s *Step) Info(handle func(interface{})) {
 
 // Do do the step with a name
 func (s *Step) Do(name string, do func(s *Step)) *Step {
-	var startedAt *time.Time
-	startedAt = s.state.StartedAt
-	if startedAt == nil {
+	if !s.inAsync {
+		return s.do(name, do)
+	}
+	s.wg.Add(1)
+	go func() {
+		s.do(name, do)
+		s.wg.Done()
+	}()
+	return s
+}
+
+func (s *Step) newAvail() bool {
+	s.childrenLock.RLock()
+	defer s.childrenLock.RUnlock()
+	for _, child := range s.children {
+		if child.state.Proceeding() || child.state.Failed() {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *Step) do(name string, do func(s *Step)) *Step {
+	if !s.inAsync && !s.newAvail() {
+		return s
+	}
+	if s.state.StartedAt == nil {
 		now := time.Now()
 		s.state.StartedAt = &now
 	}
-	if s.lastChild != nil && (s.lastChild.state.Proceeding() || s.lastChild.state.Failed()) {
-		return s
-	}
 	var cur *State = nil
-	for _, s := range s.state.States {
-		if s.Name == name {
-			cur = s
-			break
-		}
-	}
-	if cur == nil {
+	if len(s.state.States) > len(s.children) {
+		cur = s.state.States[len(s.children)]
+	} else {
 		cur = newState(name)
-
 	}
 	s.doState(cur, do)
-	s.state.lock.Lock()
-	defer s.state.lock.Unlock()
+	s.state.statesLock.Lock()
+	defer s.state.statesLock.Unlock()
 	s.state.States = append(s.state.States, cur)
 	return s
 }
@@ -87,13 +107,38 @@ func (s *Step) DoR(do func(s *Step)) *Step {
 	return s.Do(name[idx+1:], do)
 }
 
+// Async is an async do group
+// example:
+//   s.Do("hello", func(s *Step) {
+//      fmt.Printf("hello\n")
+//      s.Done()
+//   })
+//   s.Async(func() {
+//      s.DoX(func(s *Step) {
+//         fmt.Printf("\tearth\n")
+//      })
+//      s.DoX(func(s *Step) {
+//         fmt.Printf("\tmars\n")
+//      })
+//      s.DoX(func(s *Step) {
+//         fmt.Printf("\tvenus\n")
+//      })
+//   })
+func (s *Step) Async(do func()) *Step {
+	s.inAsync = true
+	do()
+	s.wg.Wait()
+	s.inAsync = false
+	return s
+}
+
 // State get the step's state
 func (s *Step) State() *State {
 	return s.state
 }
 
 func (s *Step) doState(newState *State, do func(s *Step)) {
-	s.lastChild = &Step{state: newState, parent: s}
+	step := &Step{state: newState, parent: s}
 	if newState.DoneAt != nil {
 		return
 	}
@@ -101,15 +146,22 @@ func (s *Step) doState(newState *State, do func(s *Step)) {
 		now := time.Now()
 		newState.StartedAt = &now
 	}
-	do(s.lastChild)
-	s.lastChild.syncState()
+	do(step)
+	if s.inAsync {
+		s.childrenLock.Lock()
+		defer s.childrenLock.Unlock()
+	}
+	s.children = append(s.children, step)
+	step.syncState()
 }
 
 // sync state with parents
 func (s *Step) syncState() {
 	t := s
 	for t.parent != nil {
-		t.parent.state.Err = s.state.Err
+		for _, err := range t.state.Errs {
+			t.parent.state.Errs = append(t.parent.state.Errs, s.state.Name+": "+err)
+		}
 		t.parent.state.DoneAt = s.state.DoneAt
 		t = t.parent
 	}

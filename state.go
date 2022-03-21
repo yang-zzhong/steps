@@ -12,7 +12,7 @@ type State struct {
 	// this is for user logic state
 	Info interface{} `json:"info"`
 	// if step failed, this attr will record the err.Error()
-	Err string `json:"err"`
+	Errs []string `json:"errs"`
 	// what time the step start to execute
 	StartedAt *time.Time `json:"startedAt"`
 	// what time the step is done, it will be filled whatever success or fail
@@ -20,7 +20,9 @@ type State struct {
 	// sub step's states
 	States []*State `json:"states"`
 
-	lock sync.Mutex
+	statesLock sync.Mutex
+
+	errsLock sync.Mutex
 }
 
 func newState(name string) *State {
@@ -38,17 +40,17 @@ func (state *State) LastPath() string {
 
 // Failed return whether steps fail or not
 func (state *State) Failed() bool {
-	return state.DoneAt != nil && state.Err != ""
+	return state.DoneAt != nil && len(state.Errs) > 0
 }
 
 // Succeeded return whether steps succeed or not
 func (state *State) Succeeded() bool {
-	return state.DoneAt != nil && state.Err == ""
+	return state.DoneAt != nil && len(state.Errs) == 0
 }
 
 // Proceeding return whether steps under proceeding or not
 func (state *State) Proceeding() bool {
-	return state.DoneAt == nil
+	return state.StartedAt != nil && state.DoneAt == nil
 }
 
 // Started return whether step is started
@@ -75,7 +77,7 @@ func (state *State) Get(path string) *State {
 
 // Recover set steps execute result to unexecuted state
 func (state *State) Recover() {
-	state.Err = ""
+	state.Errs = []string{}
 	state.DoneAt = nil
 	if len(state.States) == 0 {
 		state.StartedAt = nil

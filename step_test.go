@@ -12,6 +12,7 @@ import (
 func Test_state(t *testing.T) {
 	s, do := step(nil, false)
 	do()
+	printx(s.State())
 	isPathRight(t, s, "test")
 	isPathRight(t, s, "test.step1.step1")
 	isPathRight(t, s, "test.step1.step2")
@@ -26,7 +27,7 @@ func Test_failed(t *testing.T) {
 	s, do := step(nil, true)
 	do()
 	cs := s.State().Get("test.step2.step2")
-	if !(cs != nil && cs.Err == "failed because withFail setted") {
+	if !(cs != nil && cs.Errs[0] == "failed because withFail setted") {
 		t.Fatalf("state is wrong when failed")
 	}
 	if s.State().Get("test.step2.step3") != nil {
@@ -42,15 +43,15 @@ func Test_recover(t *testing.T) {
 	do()
 	s.State().Recover()
 	cs := s.State().Get("test.step2.step2")
-	if cs.Err != "" || cs.DoneAt != nil {
+	if len(cs.Errs) != 0 || cs.DoneAt != nil {
 		t.Fatalf("recover failed")
 	}
 	cs = s.State().Get("test.step2")
-	if cs.Err != "" || cs.DoneAt != nil {
+	if len(cs.Errs) != 0 || cs.DoneAt != nil {
 		t.Fatalf("parent recover failed")
 	}
 	cs = s.State().Get("test")
-	if cs.Err != "" || cs.DoneAt != nil {
+	if len(cs.Errs) != 0 || cs.DoneAt != nil {
 		t.Fatalf("parent's parent recover failed")
 	}
 }
@@ -74,6 +75,43 @@ func Test_dor(t *testing.T) {
 	s.DoR(helloWorld)
 	if s.State().Get("test.helloWorld") == nil {
 		t.Fatalf("auto get func name failed")
+	}
+}
+
+func Test_async(t *testing.T) {
+	s := New(&State{Name: "test"})
+	s.Async(func() {
+		s.Do("work1", func(s *Step) {
+			s.Done()
+		})
+		s.Do("work2", func(s *Step) {
+			s.Done()
+		})
+		s.Do("work3", func(s *Step) {
+			s.Done()
+		})
+	})
+	isPathRight(t, s, "test")
+	isPathRight(t, s, "test.work1")
+	isPathRight(t, s, "test.work2")
+	isPathRight(t, s, "test.work3")
+}
+
+func Test_async_fail(t *testing.T) {
+	s := New(&State{Name: "test"})
+	s.Async(func() {
+		s.Do("work1", func(s *Step) {
+			s.Fail(errors.New("failed"))
+		})
+		s.Do("work2", func(s *Step) {
+			s.Fail(errors.New("failed"))
+		})
+		s.Do("work3", func(s *Step) {
+			s.Fail(errors.New("failed"))
+		})
+	})
+	if len(s.State().Errs) != 3 {
+		t.Fatal("async fail errs error")
 	}
 }
 
