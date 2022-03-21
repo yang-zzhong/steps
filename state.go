@@ -51,6 +51,11 @@ func (state *State) Proceeding() bool {
 	return state.DoneAt == nil
 }
 
+// Started return whether step is started
+func (state *State) Started() bool {
+	return state.StartedAt != nil
+}
+
 // Get get sub state thru dot divided string like test.hello.world
 func (state *State) Get(path string) *State {
 	name := popFirst(&path)
