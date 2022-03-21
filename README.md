@@ -287,10 +287,10 @@ s.Do("step1", func(s *steps.Step) {
 })
 s.Async("step2", func() {
     // concurrently execute work1 and work2
-    s.Step("work1", func(s *steps.Step) {
+    s.Do("worker1", func(s *steps.Step) {
         s.Done()
     })
-    s.Step("work1", func(s *steps.Step) {
+    s.Do("worker2", func(s *steps.Step) {
         s.Done()
     })
 })
@@ -307,12 +307,10 @@ goos: darwin
 goarch: amd64
 pkg: github.com/yang-zzhong/steps
 cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
-Benchmark_Step_Do-8         	398724684	         3.049 ns/op
-Benchmark_Step_DoX-8        	393528038	         3.061 ns/op
-Benchmark_Step_DoR-8        	32740196	        32.54 ns/op
-Benchmark_State_Recover-8   	146732630	         8.270 ns/op
-Benchmark_Step_Done-8       	10623654	       121.9 ns/op
-Benchmark_Step_Fail-8       	10088080	       127.3 ns/op
-PASS
-ok  	github.com/yang-zzhong/steps	11.189s
+Benchmark_Step_Do-8         	58594831	        20.48 ns/op
+Benchmark_Step_DoX-8        	57382963	        20.71 ns/op
+Benchmark_Step_DoR-8        	25127598	        49.29 ns/op
+Benchmark_State_Recover-8   	164618029	         7.778 ns/op
+Benchmark_Step_Done-8       	10381000	       126.8 ns/op
+Benchmark_Step_Fail-8       	 7258942	       173.6 ns/op
 ```

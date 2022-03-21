@@ -13,6 +13,7 @@ type Step struct {
 	state        *State  // state of step
 	parent       *Step   // the parent step which generate this one
 	children     []*Step // last executed step of the current step
+	asyncName    string
 	inAsync      bool
 	wg           sync.WaitGroup
 	childrenLock sync.RWMutex
@@ -86,6 +87,9 @@ func (s *Step) do(name string, do func(s *Step)) *Step {
 	if len(s.state.States) > len(s.children) {
 		cur = s.state.States[len(s.children)]
 	} else {
+		if s.inAsync {
+			name = s.asyncName + ":" + name
+		}
 		cur = newState(name)
 	}
 	s.doState(cur, do)
@@ -124,8 +128,9 @@ func (s *Step) DoR(do func(s *Step)) *Step {
 //         fmt.Printf("\tvenus\n")
 //      })
 //   })
-func (s *Step) Async(do func()) *Step {
+func (s *Step) Async(name string, do func()) *Step {
 	s.inAsync = true
+	s.asyncName = name
 	do()
 	s.wg.Wait()
 	s.inAsync = false

@@ -12,7 +12,6 @@ import (
 func Test_state(t *testing.T) {
 	s, do := step(nil, false)
 	do()
-	printx(s.State())
 	isPathRight(t, s, "test")
 	isPathRight(t, s, "test.step1.step1")
 	isPathRight(t, s, "test.step1.step2")
@@ -80,7 +79,7 @@ func Test_dor(t *testing.T) {
 
 func Test_async(t *testing.T) {
 	s := New(&State{Name: "test"})
-	s.Async(func() {
+	s.Async("step1", func() {
 		s.Do("work1", func(s *Step) {
 			s.Done()
 		})
@@ -91,15 +90,19 @@ func Test_async(t *testing.T) {
 			s.Done()
 		})
 	})
+	s.Do("step2", func(s *Step) {
+		s.Done()
+	})
+	// printx(s.State())
 	isPathRight(t, s, "test")
-	isPathRight(t, s, "test.work1")
-	isPathRight(t, s, "test.work2")
-	isPathRight(t, s, "test.work3")
+	isPathRight(t, s, "test.step1:work1")
+	isPathRight(t, s, "test.step1:work2")
+	isPathRight(t, s, "test.step1:work3")
 }
 
 func Test_async_fail(t *testing.T) {
 	s := New(&State{Name: "test"})
-	s.Async(func() {
+	s.Async("step2", func() {
 		s.Do("work1", func(s *Step) {
 			s.Fail(errors.New("failed"))
 		})
