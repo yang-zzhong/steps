@@ -1,6 +1,7 @@
 package steps
 
 import (
+	"fmt"
 	"sync"
 	"time"
 )
@@ -60,6 +61,13 @@ func (state *State) Started() bool {
 
 // Get get sub state thru dot divided string like test.hello.world
 func (state *State) Get(path string) *State {
+	if path := state.get(path); path != nil {
+		return path
+	}
+	panic(fmt.Sprintf("path [%s] not found", path))
+}
+
+func (state *State) get(path string) *State {
 	name := popFirst(&path)
 	if name != state.Name {
 		return nil
@@ -68,11 +76,16 @@ func (state *State) Get(path string) *State {
 		return state
 	}
 	for _, s := range state.States {
-		if cs := s.Get(path); cs != nil {
+		if cs := s.get(path); cs != nil {
 			return cs
 		}
 	}
 	return nil
+}
+
+// Has check if path exists which means func of specified path has executed
+func (state *State) Has(path string) bool {
+	return state.get(path) != nil
 }
 
 // Recover set steps execute result to unexecuted state

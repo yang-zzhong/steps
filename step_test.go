@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"testing"
 )
 
@@ -29,10 +28,10 @@ func Test_failed(t *testing.T) {
 	if !(cs != nil && cs.Errs[0] == "failed because withFail setted") {
 		t.Fatalf("state is wrong when failed")
 	}
-	if s.State().Get("test.step2.step3") != nil {
+	if s.State().Has("test.step2.step3") {
 		t.Fatalf("next step executed after failed")
 	}
-	if s.State().Get("test.step3") != nil {
+	if s.State().Has("test.step3") {
 		t.Fatalf("next steps executed after failed")
 	}
 }
@@ -119,8 +118,7 @@ func Test_async_fail(t *testing.T) {
 }
 
 func isPathRight(t *testing.T, s *Step, path string) {
-	idx := strings.LastIndex(path, ".")
-	if s.State().Get(path).Name != path[idx+1:] {
+	if !s.State().Has(path) {
 		t.Fatalf("%s error", path)
 	}
 }
