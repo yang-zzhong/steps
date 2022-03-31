@@ -21,7 +21,7 @@ type State struct {
 	// sub step's states
 	States []*State `json:"states"`
 
-	statesLock sync.Mutex
+	statesLock sync.RWMutex
 
 	errsLock sync.Mutex
 }
@@ -33,6 +33,8 @@ func newState(name string) *State {
 // LastPath get last path of the state. it will return dot divided string like test.initializing.initEnv
 func (state *State) LastPath() string {
 	ret := state.Name
+	state.statesLock.RLock()
+	defer state.statesLock.RUnlock()
 	if len(state.States) > 0 {
 		ret += state.States[len(state.States)-1].LastPath()
 	}
@@ -69,16 +71,14 @@ func (state *State) Get(path string) *State {
 
 func (state *State) get(path string) *State {
 	name := popFirst(&path)
-	if name != state.Name {
-		return nil
-	}
-	if path == "" {
-		return state
-	}
 	for _, s := range state.States {
-		if cs := s.get(path); cs != nil {
-			return cs
+		if s.Name != name {
+			continue
 		}
+		if path == "" {
+			return s
+		}
+		return s.get(path)
 	}
 	return nil
 }
@@ -97,4 +97,19 @@ func (state *State) Recover() {
 		return
 	}
 	state.States[len(state.States)-1].Recover()
+}
+
+func (state *State) append(s *State) {
+	state.statesLock.Lock()
+	defer state.statesLock.Unlock()
+	state.States = append(state.States, s)
+}
+
+func (state *State) stateAt(idx int) *State {
+	state.statesLock.RLock()
+	defer state.statesLock.RUnlock()
+	if len(state.States) > idx {
+		return state.States[idx]
+	}
+	return nil
 }

@@ -11,27 +11,26 @@ import (
 func Test_state(t *testing.T) {
 	s, do := step(nil, false)
 	do()
-	isPathRight(t, s, "test")
-	isPathRight(t, s, "test.step1.step1")
-	isPathRight(t, s, "test.step1.step2")
-	isPathRight(t, s, "test.step2.step1")
-	isPathRight(t, s, "test.step2.step2")
-	isPathRight(t, s, "test.step2.step3")
-	isPathRight(t, s, "test.step3.step1")
-	isPathRight(t, s, "test.step3.step2")
+	isPathRight(t, s, "step1.step1")
+	isPathRight(t, s, "step1.step2")
+	isPathRight(t, s, "step2.step1")
+	isPathRight(t, s, "step2.step2")
+	isPathRight(t, s, "step2.step3")
+	isPathRight(t, s, "step3.step1")
+	isPathRight(t, s, "step3.step2")
 }
 
 func Test_failed(t *testing.T) {
 	s, do := step(nil, true)
 	do()
-	cs := s.State().Get("test.step2.step2")
+	cs := s.State().Get("step2.step2")
 	if !(cs != nil && cs.Errs[0] == "failed because withFail setted") {
 		t.Fatalf("state is wrong when failed")
 	}
-	if s.State().Has("test.step2.step3") {
+	if s.State().Has("step2.step3") {
 		t.Fatalf("next step executed after failed")
 	}
-	if s.State().Has("test.step3") {
+	if s.State().Has("step3") {
 		t.Fatalf("next steps executed after failed")
 	}
 }
@@ -40,15 +39,15 @@ func Test_recover(t *testing.T) {
 	s, do := step(nil, true)
 	do()
 	s.State().Recover()
-	cs := s.State().Get("test.step2.step2")
+	cs := s.State().Get("step2.step2")
 	if len(cs.Errs) != 0 || cs.DoneAt != nil {
 		t.Fatalf("recover failed")
 	}
-	cs = s.State().Get("test.step2")
+	cs = s.State().Get("step2")
 	if len(cs.Errs) != 0 || cs.DoneAt != nil {
 		t.Fatalf("parent recover failed")
 	}
-	cs = s.State().Get("test")
+	cs = s.State()
 	if len(cs.Errs) != 0 || cs.DoneAt != nil {
 		t.Fatalf("parent's parent recover failed")
 	}
@@ -69,15 +68,15 @@ func Test_concurrence(t *testing.T) {
 func helloWorld(s *Step) {}
 
 func Test_dor(t *testing.T) {
-	s := New(&State{Name: "test"})
+	s := New(&State{})
 	s.DoR(helloWorld)
-	if s.State().Get("test.helloWorld") == nil {
+	if s.State().Get("helloWorld") == nil {
 		t.Fatalf("auto get func name failed")
 	}
 }
 
 func Test_async(t *testing.T) {
-	s := New(&State{Name: "test"})
+	s := New(&State{})
 	s.Async("step1", func() {
 		s.Do("work1", func(s *Step) {
 			s.Done()
@@ -93,14 +92,13 @@ func Test_async(t *testing.T) {
 		s.Done()
 	})
 	// printx(s.State())
-	isPathRight(t, s, "test")
-	isPathRight(t, s, "test.step1:work1")
-	isPathRight(t, s, "test.step1:work2")
-	isPathRight(t, s, "test.step1:work3")
+	isPathRight(t, s, "step1:work1")
+	isPathRight(t, s, "step1:work2")
+	isPathRight(t, s, "step1:work3")
 }
 
 func Test_async_fail(t *testing.T) {
-	s := New(&State{Name: "test"})
+	s := New(&State{})
 	s.Async("step2", func() {
 		s.Do("work1", func(s *Step) {
 			s.Fail(errors.New("failed"))
@@ -125,7 +123,7 @@ func isPathRight(t *testing.T, s *Step, path string) {
 
 func step(state *State, withFail bool) (*Step, func()) {
 	if state == nil {
-		state = &State{Name: "test", Info: "an test state"}
+		state = &State{}
 	}
 	step := New(state)
 	return step, func() {
@@ -171,21 +169,21 @@ func printx(state interface{}) {
 }
 
 func Benchmark_Step_Do(b *testing.B) {
-	s := New(&State{Name: "hello"})
+	s := New(&State{})
 	for i := 0; i < b.N; i++ {
 		s.Do("", func(s *Step) {})
 	}
 }
 
 func Benchmark_Step_DoX(b *testing.B) {
-	s := New(&State{Name: "hello"})
+	s := New(&State{})
 	for i := 0; i < b.N; i++ {
 		s.DoX(func(s *Step) {})
 	}
 }
 
 func Benchmark_Step_DoR(b *testing.B) {
-	s := New(&State{Name: "test"})
+	s := New(&State{})
 	for i := 0; i < b.N; i++ {
 		s.DoR(func(s *Step) {})
 	}
@@ -200,14 +198,14 @@ func Benchmark_State_Recover(b *testing.B) {
 }
 
 func Benchmark_Step_Done(b *testing.B) {
-	s := New(&State{Name: "hello"})
+	s := New(&State{})
 	for i := 0; i < b.N; i++ {
 		s.Done()
 	}
 }
 
 func Benchmark_Step_Fail(b *testing.B) {
-	s := New(&State{Name: "hello"})
+	s := New(&State{})
 	err := errors.New("hello")
 	for i := 0; i < b.N; i++ {
 		s.Fail(err)

@@ -83,19 +83,15 @@ func (s *Step) do(name string, do func(s *Step)) *Step {
 		now := time.Now()
 		s.state.StartedAt = &now
 	}
-	var cur *State = nil
-	if len(s.state.States) > len(s.children) {
-		cur = s.state.States[len(s.children)]
-	} else {
+	var cur *State = s.state.stateAt(len(s.children))
+	if cur == nil {
 		if s.inAsync {
 			name = s.asyncName + ":" + name
 		}
 		cur = newState(name)
 	}
 	s.doState(cur, do)
-	s.state.statesLock.Lock()
-	defer s.state.statesLock.Unlock()
-	s.state.States = append(s.state.States, cur)
+	s.state.append(cur)
 	return s
 }
 
@@ -154,9 +150,11 @@ func (s *Step) doState(newState *State, do func(s *Step)) {
 	do(step)
 	if s.inAsync {
 		s.childrenLock.Lock()
-		defer s.childrenLock.Unlock()
+		s.children = append(s.children, step)
+		s.childrenLock.Unlock()
+	} else {
+		s.children = append(s.children, step)
 	}
-	s.children = append(s.children, step)
 	step.syncState()
 }
 
