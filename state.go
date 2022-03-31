@@ -21,13 +21,31 @@ type State struct {
 	// sub step's states
 	States []*State `json:"states"`
 
-	statesLock sync.Mutex
+	statesLock sync.RWMutex
 
 	errsLock sync.Mutex
 }
 
+var _ StateX = &State{}
+
 func newState(name string) *State {
 	return &State{Name: name, States: make([]*State, 0)}
+}
+
+func (state *State) Succeed() {
+	now := time.Now()
+	state.Errs = []string{}
+	state.DoneAt = &now
+}
+
+func (state *State) Fail(err error) {
+	now := time.Now()
+	state.Errs = []string{err.Error()}
+	state.DoneAt = &now
+}
+
+func (state *State) With(info interface{}) {
+	state.Info = info
 }
 
 // LastPath get last path of the state. it will return dot divided string like test.initializing.initEnv
@@ -59,26 +77,38 @@ func (state *State) Started() bool {
 	return state.StartedAt != nil
 }
 
+func (state *State) Start() {
+	now := time.Now()
+	state.StartedAt = &now
+}
+
 // Get get sub state thru dot divided string like test.hello.world
-func (state *State) Get(path string) *State {
-	if path := state.get(path); path != nil {
-		return path
+func (state *State) Get(path string) StateX {
+	if s := state.get(path); s != nil {
+		return s
 	}
 	panic(fmt.Sprintf("path [%s] not found", path))
 }
 
+func (state *State) SyncResult(s StateX) {
+	state.errsLock.Lock()
+	defer state.errsLock.Unlock()
+	for _, err := range s.(*State).Errs {
+		state.Errs = append(state.Errs, s.(*State).Name+": "+err)
+	}
+	state.DoneAt = s.(*State).DoneAt
+}
+
 func (state *State) get(path string) *State {
 	name := popFirst(&path)
-	if name != state.Name {
-		return nil
-	}
-	if path == "" {
-		return state
-	}
 	for _, s := range state.States {
-		if cs := s.get(path); cs != nil {
-			return cs
+		if name != s.Name {
+			continue
 		}
+		if path == "" {
+			return s
+		}
+		return s.get(path)
 	}
 	return nil
 }
@@ -97,4 +127,25 @@ func (state *State) Recover() {
 		return
 	}
 	state.States[len(state.States)-1].Recover()
+}
+
+func (state *State) Derive(name string) StateX {
+	s := &State{Name: name, States: make([]*State, 0)}
+	state.Add(s)
+	return s
+}
+
+func (state *State) Add(s StateX) {
+	state.statesLock.Lock()
+	defer state.statesLock.Unlock()
+	state.States = append(state.States, s.(*State))
+}
+
+func (state *State) StateAt(idx int) StateX {
+	state.statesLock.RLock()
+	defer state.statesLock.RUnlock()
+	if len(state.States) > idx {
+		return state.States[idx]
+	}
+	return nil
 }
